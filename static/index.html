@@ -1,0 +1,1705 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>EduVid Studio — Pembuat Video Edukasi Infografis Otomatis</title>
+  <meta name="description" content="EduVid Studio membantu membuat video edukasi infografis otomatis 100% gratis dengan Gemini AI, Pollinations, Pillow, Edge TTS, dan FFmpeg." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            canvas: '#F6F4EE',
+            surface: '#FFFFFF',
+            ink: '#0F172A',
+            muted: '#526074',
+            line: '#E5E0D5',
+            tealbrand: {
+              50: '#F0FDFA',
+              100: '#CCFBF1',
+              500: '#14B8A6',
+              600: '#0D9488',
+              700: '#0F766E',
+            },
+            amberbrand: {
+              50: '#FFF7ED',
+              500: '#F97316',
+              600: '#EA580C',
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    html {
+      scroll-behavior: smooth;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      background-color: #F6F4EE;
+      color: #0F172A;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    }
+    .studio-card {
+      background: #FFFFFF;
+      border: 1px solid #E5E0D5;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+    }
+    .option-card {
+      border: 1.5px solid #E5E0D5;
+      background: #FFFFFF;
+      transition: all 0.16s ease;
+    }
+    .option-card:hover {
+      border-color: #CBD5E1;
+      background: #FAF9F5;
+    }
+    .option-card.active {
+      border-color: #0D9488;
+      background: #F0FDFA;
+      box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+    }
+    .pill-btn {
+      border: 1.5px solid #E5E0D5;
+      background: #FFFFFF;
+      color: #334155;
+      transition: all 0.16s ease;
+    }
+    .pill-btn:hover {
+      border-color: #94A3B8;
+    }
+    .pill-btn.active {
+      background: #0F172A;
+      border-color: #0F172A;
+      color: #FFFFFF;
+    }
+    .toggle-track {
+      transition: background-color 0.2s ease;
+    }
+    .toggle-thumb {
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes spinSlow {
+      to { transform: rotate(360deg); }
+    }
+    .spinner {
+      animation: spinSlow 0.8s linear infinite;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up {
+      animation: fadeUp 0.25s ease-out both;
+    }
+    /* Custom subtle scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased selection:bg-tealbrand-100 selection:text-ink">
+
+  <!-- ==================== PIN LOCK SCREEN ==================== -->
+  <div id="pin-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-canvas px-4 py-8">
+    <div class="w-full max-w-sm studio-card rounded-3xl p-6 sm:p-8 fade-up">
+      <div class="flex flex-col items-center text-center">
+        <div class="w-14 h-14 rounded-2xl bg-ink text-white flex items-center justify-center shadow-md mb-4">
+          <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+        </div>
+        <h1 class="text-2xl font-extrabold tracking-tight text-ink">EduVid Studio</h1>
+        <p class="mt-1.5 text-sm text-muted leading-relaxed">
+          Masukkan PIN akses untuk membuka studio produksi video edukasi infografis.
+        </p>
+      </div>
+
+      <form id="pin-form" class="mt-6 space-y-4">
+        <div>
+          <label for="pin-input" class="block text-xs font-semibold uppercase tracking-wider text-muted mb-1.5">
+            PIN Studio
+          </label>
+          <div class="relative">
+            <input
+              id="pin-input"
+              type="password"
+              inputmode="numeric"
+              autocomplete="current-password"
+              placeholder="Masukkan PIN..."
+              required
+              class="w-full h-12 pl-4 pr-12 rounded-xl border border-line bg-canvas/60 font-mono text-base tracking-widest text-ink placeholder:font-sans placeholder:tracking-normal placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-tealbrand-600 focus:ring-2 focus:ring-tealbrand-600/15 transition"
+            />
+            <button
+              type="button"
+              id="toggle-pin-visibility"
+              aria-label="Tampilkan atau sembunyikan PIN"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-ink transition"
+            >
+              <svg id="eye-icon" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <p id="pin-error" class="hidden text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2"></p>
+
+        <button
+          id="pin-submit-btn"
+          type="submit"
+          class="w-full h-12 rounded-xl bg-ink hover:bg-slate-800 active:scale-[0.99] text-white font-semibold text-sm flex items-center justify-center gap-2 transition shadow-sm"
+        >
+          <span>Buka Studio</span>
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+          </svg>
+        </button>
+      </form>
+
+      <div class="mt-6 pt-4 border-t border-line flex items-center justify-between text-[11px] text-muted">
+        <span>Dilindungi header <code class="font-mono text-ink">X-App-Pin</code></span>
+        <span class="font-mono">100% Gratis</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MAIN STUDIO APP ==================== -->
+  <div id="app-shell" class="hidden min-h-screen flex flex-col">
+    <!-- Top Sticky Header -->
+    <header class="sticky top-0 z-30 bg-canvas/90 backdrop-blur-md border-b border-line">
+      <div class="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 rounded-xl bg-ink text-white flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+          </div>
+          <div class="truncate">
+            <span class="font-extrabold text-sm sm:text-base tracking-tight text-ink">EduVid Studio</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0">
+          <span id="bgm-header-badge" class="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-white border border-line text-muted">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+            BGM: Cek...
+          </span>
+          <button
+            id="lock-app-btn"
+            type="button"
+            title="Kunci Studio"
+            class="h-9 px-3 rounded-xl border border-line bg-white hover:bg-slate-50 text-xs font-semibold text-ink inline-flex items-center gap-1.5 transition"
+          >
+            <svg class="w-3.5 h-3.5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+            <span>Kunci</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 3-Step Mobile-First Stepper -->
+      <nav aria-label="Tahapan produksi" class="max-w-4xl mx-auto px-4 pb-3 pt-1">
+        <ol class="grid grid-cols-3 gap-2">
+          <li>
+            <button
+              id="step-tab-1"
+              type="button"
+              data-step="1"
+              class="step-tab w-full flex items-center justify-center sm:justify-start gap-2 px-2.5 py-2 rounded-xl border text-left transition"
+            >
+              <span class="step-num w-6 h-6 rounded-lg text-xs font-bold font-mono flex items-center justify-center shrink-0">1</span>
+              <span class="text-xs sm:text-sm font-bold truncate">Naskah</span>
+            </button>
+          </li>
+          <li>
+            <button
+              id="step-tab-2"
+              type="button"
+              data-step="2"
+              class="step-tab w-full flex items-center justify-center sm:justify-start gap-2 px-2.5 py-2 rounded-xl border text-left transition"
+            >
+              <span class="step-num w-6 h-6 rounded-lg text-xs font-bold font-mono flex items-center justify-center shrink-0">2</span>
+              <span class="text-xs sm:text-sm font-bold truncate">Visual</span>
+            </button>
+          </li>
+          <li>
+            <button
+              id="step-tab-3"
+              type="button"
+              data-step="3"
+              class="step-tab w-full flex items-center justify-center sm:justify-start gap-2 px-2.5 py-2 rounded-xl border text-left transition"
+            >
+              <span class="step-num w-6 h-6 rounded-lg text-xs font-bold font-mono flex items-center justify-center shrink-0">3</span>
+              <span class="text-xs sm:text-sm font-bold truncate">Ekspor</span>
+            </button>
+          </li>
+        </ol>
+      </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-4xl w-full mx-auto px-4 py-5 sm:py-7 pb-16">
+      <!-- Warning banner if GEMINI_API_KEY missing -->
+      <div id="gemini-warning-banner" class="hidden mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs sm:text-sm text-amber-900 flex items-start gap-2.5">
+        <svg class="w-5 h-5 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+        </svg>
+        <div>
+          <p class="font-bold">GEMINI_API_KEY belum terdeteksi di server.</p>
+          <p class="text-amber-800/90 mt-0.5">Tambahkan <code class="font-mono bg-amber-100 px-1 rounded">GEMINI_API_KEY</code> di file <code class="font-mono">.env</code> atau Hugging Face Secrets untuk membuat naskah otomatis, atau gunakan tombol <strong>Mode Storyboard Manual</strong> di bawah.</p>
+        </div>
+      </div>
+
+      <!-- ==================== STEP 1: KONSEP & NASKAH ==================== -->
+      <section id="step-1" class="space-y-5 fade-up">
+        <div class="studio-card rounded-3xl p-5 sm:p-6 space-y-5">
+          <div>
+            <h2 class="text-lg sm:text-xl font-extrabold tracking-tight text-ink">1. Konsep & Naskah Video</h2>
+            <p class="text-xs sm:text-sm text-muted mt-1">Tentukan topik atau masukkan naskah Anda, lalu pilih format dan gaya penceritaan.</p>
+          </div>
+
+          <!-- Input Mode Switch -->
+          <div class="grid grid-cols-2 p-1 rounded-2xl bg-canvas border border-line">
+            <button
+              id="mode-tema-btn"
+              type="button"
+              class="h-10 rounded-xl text-xs sm:text-sm font-bold transition bg-white text-ink shadow-sm"
+            >
+              Dari Topik (AI)
+            </button>
+            <button
+              id="mode-manual-btn"
+              type="button"
+              class="h-10 rounded-xl text-xs sm:text-sm font-bold transition text-muted hover:text-ink"
+            >
+              Naskah Manual
+            </button>
+          </div>
+
+          <!-- Tema Input -->
+          <div id="tema-box" class="space-y-2.5">
+            <label for="input-tema" class="block text-xs font-bold uppercase tracking-wider text-muted">
+              Tema Edukasi
+            </label>
+            <textarea
+              id="input-tema"
+              rows="3"
+              placeholder="Contoh: Mengapa langit berwarna biru saat siang dan jingga saat senja?"
+              class="w-full rounded-2xl border border-line bg-canvas/40 px-4 py-3 text-sm text-ink placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-tealbrand-600 focus:ring-2 focus:ring-tealbrand-600/15 transition resize-none"
+            ></textarea>
+            <div class="flex flex-wrap gap-1.5 pt-0.5">
+              <button type="button" data-sample="Mengapa langit berwarna biru dan berubah jingga saat senja?" class="sample-chip text-[11px] font-medium px-2.5 py-1.5 rounded-full bg-canvas hover:bg-tealbrand-50 hover:text-tealbrand-700 border border-line transition">
+                Mengapa langit biru?
+              </button>
+              <button type="button" data-sample="Bahaya mikroplastik di laut dan 3 cara sederhana menguranginya" class="sample-chip text-[11px] font-medium px-2.5 py-1.5 rounded-full bg-canvas hover:bg-tealbrand-50 hover:text-tealbrand-700 border border-line transition">
+                Mikroplastik di laut
+              </button>
+              <button type="button" data-sample="Cara kerja bunga majemuk agar tabungan tumbuh eksponensial" class="sample-chip text-[11px] font-medium px-2.5 py-1.5 rounded-full bg-canvas hover:bg-tealbrand-50 hover:text-tealbrand-700 border border-line transition">
+                Bunga majemuk
+              </button>
+            </div>
+          </div>
+
+          <!-- Manual Script Input -->
+          <div id="manual-box" class="hidden space-y-2">
+            <label for="input-naskah-manual" class="block text-xs font-bold uppercase tracking-wider text-muted">
+              Naskah Manual (Bahasa Indonesia)
+            </label>
+            <textarea
+              id="input-naskah-manual"
+              rows="5"
+              placeholder="Tempelkan naskah lengkap Anda di sini. Gemini akan memecahnya menjadi adegan-adegan visual (Animasi 2D, Infografis Data, dan Kartu Poin) secara otomatis..."
+              class="w-full rounded-2xl border border-line bg-canvas/40 px-4 py-3 text-sm text-ink placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-tealbrand-600 focus:ring-2 focus:ring-tealbrand-600/15 transition"
+            ></textarea>
+          </div>
+
+          <!-- Aspect Ratio & Duration -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="space-y-2">
+              <span class="block text-xs font-bold uppercase tracking-wider text-muted">Rasio Layar</span>
+              <div class="grid grid-cols-2 gap-2.5">
+                <button type="button" data-rasio="9:16" class="ratio-card option-card active rounded-2xl p-3 flex items-center gap-3 text-left">
+                  <div class="w-6 h-10 rounded-md border-2 border-tealbrand-600 bg-tealbrand-50 shrink-0"></div>
+                  <div>
+                    <div class="text-sm font-extrabold font-mono text-ink">9:16</div>
+                    <div class="text-[11px] text-muted">Reels / Shorts</div>
+                  </div>
+                </button>
+                <button type="button" data-rasio="16:9" class="ratio-card option-card rounded-2xl p-3 flex items-center gap-3 text-left">
+                  <div class="w-10 h-6 rounded-md border-2 border-slate-400 bg-slate-100 shrink-0"></div>
+                  <div>
+                    <div class="text-sm font-extrabold font-mono text-ink">16:9</div>
+                    <div class="text-[11px] text-muted">YouTube</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <span class="block text-xs font-bold uppercase tracking-wider text-muted">Target Durasi</span>
+              <div class="grid grid-cols-3 gap-2">
+                <button type="button" data-durasi="30" class="durasi-btn pill-btn h-[64px] rounded-2xl flex flex-col items-center justify-center">
+                  <span class="text-sm font-extrabold font-mono">30d</span>
+                  <span class="text-[10px] opacity-80">Singkat</span>
+                </button>
+                <button type="button" data-durasi="60" class="durasi-btn pill-btn active h-[64px] rounded-2xl flex flex-col items-center justify-center">
+                  <span class="text-sm font-extrabold font-mono">60d</span>
+                  <span class="text-[10px] opacity-80">Ideal</span>
+                </button>
+                <button type="button" data-durasi="150" class="durasi-btn pill-btn h-[64px] rounded-2xl flex flex-col items-center justify-center">
+                  <span class="text-sm font-extrabold font-mono">150d</span>
+                  <span class="text-[10px] opacity-80">Mendalam</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Structure & Language Style -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="space-y-2">
+              <label for="select-struktur" class="block text-xs font-bold uppercase tracking-wider text-muted">
+                Struktur Storytelling
+              </label>
+              <select
+                id="select-struktur"
+                class="w-full h-12 rounded-2xl border border-line bg-white px-3.5 text-sm font-semibold text-ink focus:outline-none focus:border-tealbrand-600 focus:ring-2 focus:ring-tealbrand-600/15"
+              >
+                <option value="Masalah-Data-Solusi">Masalah - Data - Solusi</option>
+                <option value="Hook-Penjelasan-Kesimpulan">Hook - Penjelasan - Kesimpulan</option>
+                <option value="Listicle/Poin">Listicle / Poin</option>
+                <option value="Perbandingan">Perbandingan</option>
+              </select>
+            </div>
+
+            <div class="space-y-2">
+              <span class="block text-xs font-bold uppercase tracking-wider text-muted">Gaya Bahasa & Intonasi</span>
+              <div class="grid grid-cols-3 gap-2">
+                <button type="button" data-gaya="Edukasi" class="gaya-btn pill-btn active h-12 rounded-2xl text-xs font-bold px-2">
+                  Edukasi
+                </button>
+                <button type="button" data-gaya="Entertainment" class="gaya-btn pill-btn h-12 rounded-2xl text-xs font-bold px-2">
+                  Hiburan
+                </button>
+                <button type="button" data-gaya="Storytelling" class="gaya-btn pill-btn h-12 rounded-2xl text-xs font-bold px-2">
+                  Cerita
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="pt-2 flex flex-col sm:flex-row gap-2.5">
+            <button
+              id="generate-script-btn"
+              type="button"
+              class="flex-1 h-13 py-3.5 px-5 rounded-2xl bg-tealbrand-600 hover:bg-tealbrand-700 active:scale-[0.99] text-white font-bold text-sm flex items-center justify-center gap-2.5 shadow-sm transition"
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+              <span>Buat Naskah dengan Gemini AI</span>
+            </button>
+
+            <button
+              id="load-demo-storyboard-btn"
+              type="button"
+              class="h-13 py-3.5 px-4 rounded-2xl border border-line bg-white hover:bg-canvas text-ink font-semibold text-xs sm:text-sm transition"
+            >
+              Mode Storyboard Manual
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== STEP 2: VISUAL, ADEGAN & AUDIO ==================== -->
+      <section id="step-2" class="hidden space-y-5 fade-up">
+        <!-- Metadata Accordion Card -->
+        <div class="studio-card rounded-3xl overflow-hidden">
+          <button
+            id="toggle-meta-btn"
+            type="button"
+            class="w-full px-5 py-4 flex items-center justify-between gap-3 text-left hover:bg-canvas/50 transition"
+          >
+            <div class="min-w-0">
+              <div class="text-[11px] font-bold uppercase tracking-wider text-tealbrand-700">Metadata Video</div>
+              <div id="meta-preview-title" class="text-sm sm:text-base font-extrabold text-ink truncate mt-0.5">
+                Belum ada judul
+              </div>
+            </div>
+            <svg id="meta-chevron" class="w-5 h-5 text-muted shrink-0 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
+          </button>
+
+          <div id="meta-editor-body" class="hidden px-5 pb-5 pt-1 border-t border-line space-y-3">
+            <div>
+              <label for="meta-judul" class="block text-xs font-bold text-muted mb-1">Judul</label>
+              <input id="meta-judul" type="text" class="w-full h-10 rounded-xl border border-line px-3 text-sm font-semibold text-ink focus:outline-none focus:border-tealbrand-600" />
+            </div>
+            <div>
+              <label for="meta-deskripsi" class="block text-xs font-bold text-muted mb-1">Deskripsi</label>
+              <textarea id="meta-deskripsi" rows="2" class="w-full rounded-xl border border-line px-3 py-2 text-sm text-ink focus:outline-none focus:border-tealbrand-600"></textarea>
+            </div>
+            <div>
+              <label for="meta-hashtags" class="block text-xs font-bold text-muted mb-1">Hashtags (pisahkan dengan spasi)</label>
+              <input id="meta-hashtags" type="text" class="w-full h-10 rounded-xl border border-line px-3 font-mono text-xs text-tealbrand-700 focus:outline-none focus:border-tealbrand-600" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Visual Generation Toolbar -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-line rounded-2xl p-4">
+          <div>
+            <h2 class="text-base sm:text-lg font-extrabold text-ink">2. Storyboard & Visual Adegan</h2>
+            <p id="scenes-summary-text" class="text-xs text-muted mt-0.5">0 adegan siap dibuatkan visual.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              id="add-scene-btn"
+              type="button"
+              class="h-11 px-3.5 rounded-xl border border-line bg-canvas/70 hover:bg-canvas text-xs font-bold text-ink transition"
+            >
+              + Adegan
+            </button>
+            <button
+              id="generate-all-visuals-btn"
+              type="button"
+              class="flex-1 sm:flex-none h-11 px-4 rounded-xl bg-ink hover:bg-slate-800 text-white text-xs sm:text-sm font-bold inline-flex items-center justify-center gap-2 transition"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+              </svg>
+              <span>Generate Semua Visual</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Visual Progress Bar -->
+        <div id="visual-progress-wrap" class="hidden studio-card rounded-2xl p-4 space-y-2">
+          <div class="flex items-center justify-between text-xs font-semibold">
+            <span id="visual-progress-label" class="text-ink">Menghasilkan visual...</span>
+            <span id="visual-progress-pct" class="font-mono text-tealbrand-700">0%</span>
+          </div>
+          <div class="w-full h-2 rounded-full bg-canvas overflow-hidden">
+            <div id="visual-progress-bar" class="h-full bg-tealbrand-600 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Scene Cards Grid -->
+        <div id="scenes-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+
+        <!-- Audio, Subtitle & Render Settings Card -->
+        <div class="studio-card rounded-3xl p-5 sm:p-6 space-y-5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 class="text-base sm:text-lg font-extrabold text-ink">Pengaturan Suara & Render Video</h3>
+              <p class="text-xs text-muted mt-0.5">Ken Burns zoom halus, transisi crossfade, dan ekspor MP4 siap unggah.</p>
+            </div>
+            <span id="preset-indicator" class="text-[11px] font-mono font-semibold px-2.5 py-1 rounded-lg bg-tealbrand-50 text-tealbrand-700 border border-tealbrand-100">
+              Edukasi · +0% · +0Hz
+            </span>
+          </div>
+
+          <!-- Voice Selector -->
+          <div class="space-y-2">
+            <span class="block text-xs font-bold uppercase tracking-wider text-muted">Suara Narator (Edge TTS)</span>
+            <div class="grid grid-cols-2 gap-2.5">
+              <button type="button" data-voice="id-ID-ArdiNeural" class="voice-card option-card active rounded-2xl p-3.5 text-left flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-ink text-white text-xs font-extrabold flex items-center justify-center shrink-0">AR</div>
+                <div class="min-w-0">
+                  <div class="text-sm font-bold text-ink truncate">Ardi</div>
+                  <div class="text-[11px] text-muted truncate">Pria · id-ID</div>
+                </div>
+              </button>
+              <button type="button" data-voice="id-ID-GadisNeural" class="voice-card option-card rounded-2xl p-3.5 text-left flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-amberbrand-600 text-white text-xs font-extrabold flex items-center justify-center shrink-0">GD</div>
+                <div class="min-w-0">
+                  <div class="text-sm font-bold text-ink truncate">Gadis</div>
+                  <div class="text-[11px] text-muted truncate">Wanita · id-ID</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Subtitle & BGM Switches -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- Subtitle Switch -->
+            <div class="flex items-center justify-between gap-3 rounded-2xl border border-line bg-canvas/40 px-4 py-3">
+              <div>
+                <div class="text-sm font-bold text-ink">Subtitle Otomatis</div>
+                <div class="text-[11px] text-muted">Tanamkan teks bersih (.srt) di bawah layar</div>
+              </div>
+              <button
+                id="toggle-subtitle"
+                type="button"
+                role="switch"
+                aria-checked="true"
+                class="toggle-track relative w-12 h-7 rounded-full bg-tealbrand-600 shrink-0 focus:outline-none"
+              >
+                <span class="toggle-thumb block w-5 h-5 rounded-full bg-white shadow transform translate-x-6"></span>
+              </button>
+            </div>
+
+            <!-- BGM Switch -->
+            <div class="flex items-center justify-between gap-3 rounded-2xl border border-line bg-canvas/40 px-4 py-3">
+              <div class="min-w-0">
+                <div class="text-sm font-bold text-ink">Musik Latar (15%)</div>
+                <div id="bgm-status-text" class="text-[11px] text-muted truncate">Memeriksa assets/bgm/...</div>
+              </div>
+              <button
+                id="toggle-bgm"
+                type="button"
+                role="switch"
+                aria-checked="true"
+                class="toggle-track relative w-12 h-7 rounded-full bg-tealbrand-600 shrink-0 focus:outline-none"
+              >
+                <span class="toggle-thumb block w-5 h-5 rounded-full bg-white shadow transform translate-x-6"></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Optional BGM File Picker (shown only if >1 mp3 in assets/bgm/) -->
+          <div id="bgm-picker-wrap" class="hidden">
+            <label for="select-bgm-file" class="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">Pilih File BGM</label>
+            <select id="select-bgm-file" class="w-full h-11 rounded-xl border border-line bg-white px-3 text-sm font-medium text-ink"></select>
+          </div>
+
+          <!-- Render CTA -->
+          <div class="pt-1 flex flex-col sm:flex-row gap-2.5">
+            <button
+              id="back-to-step1-btn"
+              type="button"
+              class="h-13 py-3 px-4 rounded-2xl border border-line bg-white hover:bg-canvas text-sm font-semibold text-ink transition"
+            >
+              ← Kembali
+            </button>
+            <button
+              id="render-video-btn"
+              type="button"
+              class="flex-1 h-13 py-3.5 px-5 rounded-2xl bg-tealbrand-600 hover:bg-tealbrand-700 active:scale-[0.99] text-white font-bold text-sm flex items-center justify-center gap-2.5 shadow-sm transition"
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+              </svg>
+              <span>Render Video MP4 Sekarang</span>
+            </button>
+          </div>
+
+          <!-- Render Status Box -->
+          <div id="render-status-box" class="hidden rounded-2xl border border-tealbrand-100 bg-tealbrand-50 px-4 py-3.5 flex items-center gap-3">
+            <svg class="w-5 h-5 text-tealbrand-700 spinner shrink-0" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+            <div class="text-xs sm:text-sm">
+              <div id="render-status-title" class="font-bold text-tealbrand-700">Sedang memproduksi video...</div>
+              <div class="text-tealbrand-700/80 text-xs mt-0.5">Menghasilkan suara narator, menyusun subtitle, efek Ken Burns & transisi FFmpeg. Mohon tunggu sebentar.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== STEP 3: HASIL & EKSPOR ==================== -->
+      <section id="step-3" class="hidden space-y-5 fade-up">
+        <div class="studio-card rounded-3xl p-5 sm:p-6 space-y-5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 class="text-lg sm:text-xl font-extrabold tracking-tight text-ink">3. Video Siap Unduh & Publikasi</h2>
+              <p class="text-xs sm:text-sm text-muted mt-0.5">Pratinjau hasil akhir, unduh MP4, dan salin metadata untuk media sosial.</p>
+            </div>
+            <div id="render-meta-chips" class="flex flex-wrap gap-1.5"></div>
+          </div>
+
+          <!-- Video Player -->
+          <div class="rounded-2xl bg-ink p-2 sm:p-3 flex items-center justify-center">
+            <video
+              id="final-video-player"
+              controls
+              playsinline
+              class="rounded-xl max-h-[540px] w-auto max-w-full bg-black shadow-lg"
+            ></video>
+          </div>
+
+          <!-- Primary Download & Navigation Actions -->
+          <div class="flex flex-col sm:flex-row gap-2.5">
+            <button
+              id="download-mp4-btn"
+              type="button"
+              class="flex-1 h-13 py-3.5 px-5 rounded-2xl bg-ink hover:bg-slate-800 active:scale-[0.99] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition"
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              <span>Download Video MP4</span>
+            </button>
+            <button
+              id="back-to-step2-btn"
+              type="button"
+              class="h-13 py-3 px-4 rounded-2xl border border-line bg-white hover:bg-canvas text-sm font-semibold text-ink transition"
+            >
+              Edit Adegan
+            </button>
+            <button
+              id="new-project-btn"
+              type="button"
+              class="h-13 py-3 px-4 rounded-2xl border border-line bg-white hover:bg-canvas text-sm font-semibold text-muted hover:text-ink transition"
+            >
+              Proyek Baru
+            </button>
+          </div>
+        </div>
+
+        <!-- Copy Metadata Card -->
+        <div class="studio-card rounded-3xl p-5 sm:p-6 space-y-4">
+          <div class="flex items-center justify-between gap-2">
+            <h3 class="text-base font-extrabold text-ink">Paket Metadata Publikasi</h3>
+            <button
+              id="copy-all-meta-btn"
+              type="button"
+              class="h-9 px-3.5 rounded-xl bg-tealbrand-50 hover:bg-tealbrand-100 text-tealbrand-700 text-xs font-bold transition"
+            >
+              Salin Semua
+            </button>
+          </div>
+
+          <!-- Judul -->
+          <div class="rounded-2xl border border-line bg-canvas/40 p-3.5 space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[11px] font-bold uppercase tracking-wider text-muted">Judul Video</span>
+              <button id="copy-judul-btn" type="button" class="text-xs font-bold text-tealbrand-700 hover:underline">Salin Judul</button>
+            </div>
+            <p id="export-judul" class="text-sm font-bold text-ink leading-snug"></p>
+          </div>
+
+          <!-- Deskripsi -->
+          <div class="rounded-2xl border border-line bg-canvas/40 p-3.5 space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[11px] font-bold uppercase tracking-wider text-muted">Deskripsi</span>
+              <button id="copy-deskripsi-btn" type="button" class="text-xs font-bold text-tealbrand-700 hover:underline">Salin Deskripsi</button>
+            </div>
+            <p id="export-deskripsi" class="text-sm text-slate-700 whitespace-pre-line leading-relaxed"></p>
+          </div>
+
+          <!-- Hashtags -->
+          <div class="rounded-2xl border border-line bg-canvas/40 p-3.5 space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[11px] font-bold uppercase tracking-wider text-muted">Hashtags</span>
+              <button id="copy-hashtags-btn" type="button" class="text-xs font-bold text-tealbrand-700 hover:underline">Salin Hashtag</button>
+            </div>
+            <div id="export-hashtags" class="flex flex-wrap gap-1.5"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Image Lightbox Modal -->
+  <div id="lightbox-modal" class="hidden fixed inset-0 z-50 bg-ink/85 backdrop-blur-sm p-4 flex items-center justify-center">
+    <button
+      id="close-lightbox-btn"
+      type="button"
+      aria-label="Tutup pratinjau"
+      class="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition"
+    >
+      <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+    <img id="lightbox-img" src="" alt="Pratinjau visual adegan" class="max-h-[90vh] max-w-[94vw] rounded-2xl shadow-2xl object-contain" />
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-box" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex flex-col gap-2 items-center w-full max-w-sm px-4"></div>
+
+  <script>
+    (() => {
+      const PRESET_MAP = {
+        Edukasi: { rate: '+0%', pitch: '+0Hz' },
+        Entertainment: { rate: '+12%', pitch: '+2Hz' },
+        Storytelling: { rate: '-6%', pitch: '-2Hz' },
+      };
+
+      const state = {
+        pin: sessionStorage.getItem('eduvid_pin') || '',
+        currentStep: 1,
+        maxReachedStep: 1,
+        inputMode: 'tema', // 'tema' | 'manual'
+        rasio: '9:16',
+        durasi: 60,
+        struktur: 'Masalah-Data-Solusi',
+        gaya_bahasa: 'Edukasi',
+        voice: 'id-ID-ArdiNeural',
+        subtitle: true,
+        enable_bgm: true,
+        bgmFiles: [],
+        selectedBgm: '',
+        projectId: null,
+        judul: '',
+        deskripsi: '',
+        hashtags: [],
+        scenes: [],
+        sceneBlobUrls: {},
+        videoBlobUrl: null,
+        renderMeta: null,
+      };
+
+      const $ = (id) => document.getElementById(id);
+
+      function showToast(message, type = 'info') {
+        const box = $('toast-box');
+        const el = document.createElement('div');
+        const styles =
+          type === 'error'
+            ? 'bg-red-600 text-white'
+            : type === 'success'
+            ? 'bg-ink text-white'
+            : 'bg-slate-800 text-white';
+        el.className = `${styles} text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-2xl shadow-lg fade-up pointer-events-auto text-center`;
+        el.textContent = message;
+        box.appendChild(el);
+        setTimeout(() => {
+          el.style.opacity = '0';
+          el.style.transition = 'opacity 0.25s ease';
+          setTimeout(() => el.remove(), 260);
+        }, 3200);
+      }
+
+      async function apiFetch(url, options = {}) {
+        const headers = new Headers(options.headers || {});
+        headers.set('X-App-Pin', state.pin);
+        if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+          headers.set('Content-Type', 'application/json');
+        }
+        const resp = await fetch(url, { ...options, headers });
+        if (resp.status === 401) {
+          lockStudio('Sesi PIN berakhir atau tidak valid.');
+          throw new Error('PIN tidak valid.');
+        }
+        return resp;
+      }
+
+      async function fetchProtectedBlobUrl(endpoint) {
+        const resp = await apiFetch(endpoint, { method: 'GET' });
+        if (!resp.ok) throw new Error('Gagal memuat media.');
+        const blob = await resp.blob();
+        return URL.createObjectURL(blob);
+      }
+
+      function lockStudio(reason = '') {
+        state.pin = '';
+        sessionStorage.removeItem('eduvid_pin');
+        $('app-shell').classList.add('hidden');
+        $('pin-screen').classList.remove('hidden');
+        $('pin-input').value = '';
+        if (reason) {
+          $('pin-error').textContent = reason;
+          $('pin-error').classList.remove('hidden');
+        } else {
+          $('pin-error').classList.add('hidden');
+        }
+        setTimeout(() => $('pin-input').focus(), 50);
+      }
+
+      async function verifyAndUnlock(pinValue, silent = false) {
+        const submitBtn = $('pin-submit-btn');
+        if (!silent) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<span>Memeriksa PIN...</span>';
+          $('pin-error').classList.add('hidden');
+        }
+        try {
+          const resp = await fetch('/api/verify-pin', {
+            headers: { 'X-App-Pin': pinValue.trim() },
+          });
+          if (!resp.ok) {
+            if (!silent) {
+              $('pin-error').textContent = 'PIN salah. Periksa kembali nilai APP_PIN Anda.';
+              $('pin-error').classList.remove('hidden');
+            }
+            return false;
+          }
+          const data = await resp.json();
+          state.pin = pinValue.trim();
+          sessionStorage.setItem('eduvid_pin', state.pin);
+          state.bgmFiles = Array.isArray(data.bgm_files) ? data.bgm_files : [];
+          state.selectedBgm = state.bgmFiles[0] || '';
+          updateBgmUI();
+
+          if (!data.has_gemini_key) {
+            $('gemini-warning-banner').classList.remove('hidden');
+          } else {
+            $('gemini-warning-banner').classList.add('hidden');
+          }
+
+          $('pin-screen').classList.add('hidden');
+          $('app-shell').classList.remove('hidden');
+          goToStep(state.currentStep);
+          return true;
+        } catch (err) {
+          if (!silent) {
+            $('pin-error').textContent = 'Tidak dapat terhubung ke server EduVid Studio.';
+            $('pin-error').classList.remove('hidden');
+          }
+          return false;
+        } finally {
+          if (!silent) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = `<span>Buka Studio</span><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>`;
+          }
+        }
+      }
+
+      function updateBgmUI() {
+        const badge = $('bgm-header-badge');
+        const statusTxt = $('bgm-status-text');
+        const pickerWrap = $('bgm-picker-wrap');
+        const select = $('select-bgm-file');
+
+        if (state.bgmFiles.length > 0) {
+          badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-tealbrand-600"></span> BGM: ${state.bgmFiles.length} MP3`;
+          statusTxt.textContent = `Aktif (${state.bgmFiles[0]}) · fade-out akhir`;
+          if (state.bgmFiles.length > 1) {
+            pickerWrap.classList.remove('hidden');
+            select.innerHTML = state.bgmFiles
+              .map((f) => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`)
+              .join('');
+            select.value = state.selectedBgm;
+          } else {
+            pickerWrap.classList.add('hidden');
+          }
+        } else {
+          badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Tanpa BGM`;
+          statusTxt.textContent = 'Folder assets/bgm/ kosong (tetap jalan normal)';
+          pickerWrap.classList.add('hidden');
+        }
+      }
+
+      function updatePresetBadge() {
+        const p = PRESET_MAP[state.gaya_bahasa] || PRESET_MAP.Edukasi;
+        $('preset-indicator').textContent = `${state.gaya_bahasa} · ${p.rate} · ${p.pitch}`;
+      }
+
+      function goToStep(stepNum) {
+        if (stepNum > state.maxReachedStep) return;
+        state.currentStep = stepNum;
+
+        [1, 2, 3].forEach((n) => {
+          const sec = $(`step-${n}`);
+          const tab = $(`step-tab-${n}`);
+          const num = tab.querySelector('.step-num');
+          sec.classList.toggle('hidden', n !== stepNum);
+
+          if (n === stepNum) {
+            tab.className = 'step-tab w-full flex items-center justify-center sm:justify-start gap-2 px-2.5 py-2 rounded-xl border border-tealbrand-600 bg-white text-ink shadow-sm transition';
+            num.className = 'step-num w-6 h-6 rounded-lg text-xs font-bold font-mono flex items-center justify-center shrink-0 bg-tealbrand-600 text-white';
+          } else if (n <= state.maxReachedStep) {
+            tab.className = 'step-tab w-full flex items-center justify-center sm:justify-start gap-2 px-2.5 py-2 rounded-xl border border-line bg-white/70 text-ink hover:bg-white transition cursor-pointer';
+            num.className = 'step-num w-6 h-6 rounded-lg text-xs font-bold font-mono flex items-center justify-center shrink-0 bg-ink text-white';
+          } else {
+            tab.className = 'step-tab w-full flex items-center justify-center sm:justify-start gap-2 px-2.5 py-2 rounded-xl border border-transparent bg-canvas text-slate-400 cursor-not-allowed';
+            num.className = 'step-num w-6 h-6 rounded-lg text-xs font-bold font-mono flex items-center justify-center shrink-0 bg-slate-200 text-slate-500';
+          }
+        });
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      function escapeHtml(str) {
+        return String(str ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function syncMetadataUI() {
+        $('meta-preview-title').textContent = state.judul || 'Video Edukasi Infografis';
+        $('meta-judul').value = state.judul || '';
+        $('meta-deskripsi').value = state.deskripsi || '';
+        $('meta-hashtags').value = (state.hashtags || []).join(' ');
+
+        $('export-judul').textContent = state.judul || '-';
+        $('export-deskripsi').textContent = state.deskripsi || '-';
+        const tagsWrap = $('export-hashtags');
+        tagsWrap.innerHTML = (state.hashtags || [])
+          .map(
+            (tag) =>
+              `<span class="font-mono text-xs font-semibold px-2.5 py-1 rounded-full bg-tealbrand-50 text-tealbrand-700 border border-tealbrand-100">${escapeHtml(tag)}</span>`
+          )
+          .join('');
+      }
+
+      function createDefaultScene(index) {
+        const types = ['animasi_2d', 'infografis_data', 'kartu_poin'];
+        const tipe = types[index % types.length];
+        return {
+          narasi:
+            tipe === 'animasi_2d'
+              ? 'Pernahkah kamu bertanya mengapa fenomena alam ini terjadi setiap hari di sekitar kita?'
+              : tipe === 'infografis_data'
+              ? 'Data penelitian menunjukkan perubahan yang sangat signifikan dalam beberapa tahun terakhir.'
+              : 'Ada tiga langkah sederhana yang bisa langsung kita terapkan mulai hari ini.',
+          tipe_visual: tipe,
+          visual_prompt:
+            'flat vector illustration in Kurzgesagt style, curious glowing Earth surrounded by soft geometric light waves on deep navy sky, vibrant teal and warm orange palette, no text, no letters, no watermark',
+          data_grafik: {
+            judul_grafik: 'Perbandingan Data Utama',
+            satuan: '%',
+            items: [
+              { label: 'Faktor A', nilai: 35 },
+              { label: 'Faktor B', nilai: 68 },
+              { label: 'Faktor C', nilai: 92 },
+            ],
+          },
+          poin_teks: {
+            judul: '3 Langkah Praktis',
+            poin: [
+              'Pahami konsep dasar secara ringkas',
+              'Cek fakta dan data yang kredibel',
+              'Bagikan ilmu dengan bahasa sederhana',
+            ],
+          },
+          _source: '',
+          _warning: '',
+        };
+      }
+
+      function renderScenes() {
+        const container = $('scenes-container');
+        $('scenes-summary-text').textContent = `${state.scenes.length} adegan · rasio ${state.rasio} (${state.rasio === '9:16' ? '1080×1920' : '1920×1080'})`;
+
+        container.innerHTML = state.scenes
+          .map((scene, idx) => {
+            const blobUrl = state.sceneBlobUrls[idx];
+            const isPortrait = state.rasio === '9:16';
+            const frameClass = isPortrait
+              ? 'w-full max-w-[230px] aspect-[9/16] mx-auto'
+              : 'w-full aspect-[16/9]';
+
+            const sourceLabel =
+              scene._source === 'pollinations'
+                ? 'Pollinations AI'
+                : scene._source === 'pillow_infografis'
+                ? 'Pillow Grafik'
+                : scene._source === 'pillow_kartu_poin'
+                ? 'Pillow Kartu'
+                : scene._source === 'fallback'
+                ? 'Vektor Cadangan'
+                : '';
+
+            let visualFieldsHtml = '';
+            if (scene.tipe_visual === 'animasi_2d') {
+              visualFieldsHtml = `
+                <div class="space-y-1">
+                  <label class="block text-[11px] font-bold uppercase tracking-wider text-muted">Prompt Visual (EN · Kurzgesagt)</label>
+                  <textarea
+                    data-scene-idx="${idx}"
+                    data-field="visual_prompt"
+                    rows="2"
+                    class="scene-input w-full rounded-xl border border-line bg-canvas/40 px-3 py-2 text-xs font-mono text-slate-700 focus:outline-none focus:bg-white focus:border-tealbrand-600"
+                  >${escapeHtml(scene.visual_prompt || '')}</textarea>
+                </div>
+              `;
+            } else if (scene.tipe_visual === 'infografis_data') {
+              const dg = scene.data_grafik || { judul_grafik: '', satuan: '%', items: [] };
+              const rowsHtml = (dg.items || [])
+                .map(
+                  (it, rIdx) => `
+                  <div class="flex items-center gap-1.5">
+                    <input type="text" data-scene-idx="${idx}" data-grafik-row="${rIdx}" data-grafik-key="label" value="${escapeHtml(it.label)}" placeholder="Label" class="grafik-item-input flex-1 h-9 rounded-lg border border-line bg-white px-2.5 text-xs text-ink" />
+                    <input type="number" step="any" data-scene-idx="${idx}" data-grafik-row="${rIdx}" data-grafik-key="nilai" value="${escapeHtml(it.nilai)}" placeholder="Angka" class="grafik-item-input w-20 h-9 rounded-lg border border-line bg-white px-2.5 text-xs font-mono text-ink" />
+                    <button type="button" data-scene-idx="${idx}" data-remove-grafik="${rIdx}" class="remove-grafik-btn w-8 h-9 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 text-xs font-bold">×</button>
+                  </div>
+                `
+                )
+                .join('');
+
+              visualFieldsHtml = `
+                <div class="space-y-2 rounded-xl bg-canvas/60 border border-line p-3">
+                  <div class="grid grid-cols-3 gap-2">
+                    <div class="col-span-2">
+                      <label class="block text-[10px] font-bold uppercase text-muted mb-1">Judul Grafik</label>
+                      <input type="text" data-scene-idx="${idx}" data-grafik-meta="judul_grafik" value="${escapeHtml(dg.judul_grafik || '')}" class="grafik-meta-input w-full h-9 rounded-lg border border-line bg-white px-2.5 text-xs font-semibold text-ink" />
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold uppercase text-muted mb-1">Satuan</label>
+                      <input type="text" data-scene-idx="${idx}" data-grafik-meta="satuan" value="${escapeHtml(dg.satuan || '')}" placeholder="%" class="grafik-meta-input w-full h-9 rounded-lg border border-line bg-white px-2.5 text-xs font-mono text-ink" />
+                    </div>
+                  </div>
+                  <div class="space-y-1.5">${rowsHtml}</div>
+                  ${
+                    (dg.items || []).length < 5
+                      ? `<button type="button" data-add-grafik="${idx}" class="add-grafik-btn text-[11px] font-bold text-tealbrand-700 hover:underline">+ Tambah Batang Data</button>`
+                      : ''
+                  }
+                </div>
+              `;
+            } else {
+              const pt = scene.poin_teks || { judul: '', poin: [] };
+              const poinRowsHtml = (pt.poin || [])
+                .map(
+                  (pTxt, pIdx) => `
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-5 h-5 rounded-full bg-tealbrand-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">${pIdx + 1}</span>
+                    <input type="text" data-scene-idx="${idx}" data-poin-row="${pIdx}" value="${escapeHtml(pTxt)}" class="poin-item-input flex-1 h-9 rounded-lg border border-line bg-white px-2.5 text-xs text-ink" />
+                    <button type="button" data-scene-idx="${idx}" data-remove-poin="${pIdx}" class="remove-poin-btn w-8 h-9 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 text-xs font-bold">×</button>
+                  </div>
+                `
+                )
+                .join('');
+
+              visualFieldsHtml = `
+                <div class="space-y-2 rounded-xl bg-canvas/60 border border-line p-3">
+                  <div>
+                    <label class="block text-[10px] font-bold uppercase text-muted mb-1">Judul Kartu Poin</label>
+                    <input type="text" data-scene-idx="${idx}" data-poin-judul="1" value="${escapeHtml(pt.judul || '')}" class="poin-judul-input w-full h-9 rounded-lg border border-line bg-white px-2.5 text-xs font-semibold text-ink" />
+                  </div>
+                  <div class="space-y-1.5">${poinRowsHtml}</div>
+                  ${
+                    (pt.poin || []).length < 3
+                      ? `<button type="button" data-add-poin="${idx}" class="add-poin-btn text-[11px] font-bold text-tealbrand-700 hover:underline">+ Tambah Poin</button>`
+                      : ''
+                  }
+                </div>
+              `;
+            }
+
+            return `
+              <article class="studio-card rounded-3xl p-4 flex flex-col gap-3.5" data-scene-card="${idx}">
+                <!-- Card Header -->
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="px-2.5 py-1 rounded-lg bg-ink text-white font-mono text-xs font-bold shrink-0">#${idx + 1}</span>
+                    <select
+                      data-scene-idx="${idx}"
+                      data-field="tipe_visual"
+                      class="scene-type-select h-8 rounded-lg border border-line bg-canvas/70 px-2 text-xs font-bold text-ink focus:outline-none focus:border-tealbrand-600"
+                    >
+                      <option value="animasi_2d" ${scene.tipe_visual === 'animasi_2d' ? 'selected' : ''}>Animasi 2D</option>
+                      <option value="infografis_data" ${scene.tipe_visual === 'infografis_data' ? 'selected' : ''}>Infografis Data</option>
+                      <option value="kartu_poin" ${scene.tipe_visual === 'kartu_poin' ? 'selected' : ''}>Kartu Poin</option>
+                    </select>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-regen-scene="${idx}"
+                      class="regen-scene-btn h-8 px-2.5 rounded-lg border border-line bg-white hover:bg-tealbrand-50 hover:border-tealbrand-500 hover:text-tealbrand-700 text-[11px] font-bold text-ink inline-flex items-center gap-1 transition"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                      </svg>
+                      <span>Ganti Gambar</span>
+                    </button>
+                    ${
+                      state.scenes.length > 1
+                        ? `<button type="button" data-delete-scene="${idx}" title="Hapus adegan" class="delete-scene-btn w-8 h-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition">×</button>`
+                        : ''
+                    }
+                  </div>
+                </div>
+
+                <!-- Visual Preview Frame -->
+                <div class="rounded-2xl bg-canvas border border-line/80 p-2.5">
+                  <div class="${frameClass} relative rounded-xl overflow-hidden bg-slate-200/70 flex items-center justify-center">
+                    ${
+                      blobUrl
+                        ? `<img src="${blobUrl}" alt="Visual Adegan ${idx + 1}" data-zoom-img="${blobUrl}" class="zoomable-img w-full h-full object-cover cursor-zoom-in" />
+                           ${sourceLabel ? `<span class="absolute top-2 left-2 text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-ink/75 text-white backdrop-blur-sm">${escapeHtml(sourceLabel)}</span>` : ''}`
+                        : `<div class="text-center px-4 py-6">
+                             <svg class="w-7 h-7 mx-auto text-slate-400 mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6">
+                               <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+                             </svg>
+                             <p class="text-[11px] font-medium text-muted">Belum dirender.<br/>Klik <strong>Ganti Gambar</strong> atau <strong>Generate Semua</strong>.</p>
+                           </div>`
+                    }
+                  </div>
+                  ${
+                    scene._warning
+                      ? `<p class="mt-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">${escapeHtml(scene._warning)}</p>`
+                      : ''
+                  }
+                </div>
+
+                <!-- Narration Editor -->
+                <div class="space-y-1">
+                  <div class="flex items-center justify-between">
+                    <label class="text-[11px] font-bold uppercase tracking-wider text-muted">Narasi (ID)</label>
+                    <span class="text-[10px] font-mono text-muted">${(scene.narasi || '').trim().split(/\s+/).filter(Boolean).length} kata</span>
+                  </div>
+                  <textarea
+                    data-scene-idx="${idx}"
+                    data-field="narasi"
+                    rows="3"
+                    class="scene-input w-full rounded-xl border border-line bg-white px-3 py-2 text-xs sm:text-sm text-ink leading-relaxed focus:outline-none focus:border-tealbrand-600 focus:ring-2 focus:ring-tealbrand-600/10"
+                  >${escapeHtml(scene.narasi || '')}</textarea>
+                </div>
+
+                <!-- Context-specific visual editor -->
+                ${visualFieldsHtml}
+              </article>
+            `;
+          })
+          .join('');
+      }
+
+      async function regenerateSingleScene(idx, silentToast = false) {
+        const btn = document.querySelector(`[data-regen-scene="${idx}"]`);
+        const originalHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+          btn.disabled = true;
+          btn.innerHTML = `<svg class="w-3.5 h-3.5 spinner" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg><span>Proses...</span>`;
+        }
+
+        try {
+          const scene = state.scenes[idx];
+          const resp = await apiFetch('/api/regenerate-scene', {
+            method: 'POST',
+            body: JSON.stringify({
+              project_id: state.projectId,
+              scene_index: idx,
+              rasio: state.rasio,
+              scene: {
+                narasi: scene.narasi,
+                tipe_visual: scene.tipe_visual,
+                visual_prompt: scene.visual_prompt,
+                data_grafik: scene.data_grafik,
+                poin_teks: scene.poin_teks,
+              },
+            }),
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.detail || 'Gagal membuat gambar.');
+
+          state.projectId = data.project_id;
+          const blobUrl = await fetchProtectedBlobUrl(data.image_endpoint);
+          if (state.sceneBlobUrls[idx]) {
+            URL.revokeObjectURL(state.sceneBlobUrls[idx]);
+          }
+          state.sceneBlobUrls[idx] = blobUrl;
+          scene._source = data.source || '';
+          scene._warning = data.warning || '';
+          renderScenes();
+          if (!silentToast) showToast(`Visual adegan #${idx + 1} diperbarui.`, 'success');
+        } catch (err) {
+          showToast(err.message || 'Gagal mengganti gambar adegan.', 'error');
+        } finally {
+          if (btn && document.body.contains(btn)) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+          }
+        }
+      }
+
+      async function generateAllVisuals() {
+        if (!state.scenes.length) return;
+        const btn = $('generate-all-visuals-btn');
+        const wrap = $('visual-progress-wrap');
+        const bar = $('visual-progress-bar');
+        const lbl = $('visual-progress-label');
+        const pct = $('visual-progress-pct');
+
+        btn.disabled = true;
+        wrap.classList.remove('hidden');
+
+        try {
+          for (let i = 0; i < state.scenes.length; i++) {
+            const progress = Math.round((i / state.scenes.length) * 100);
+            lbl.textContent = `Membuat visual adegan ${i + 1} dari ${state.scenes.length}...`;
+            pct.textContent = `${progress}%`;
+            bar.style.width = `${Math.max(progress, 8)}%`;
+            await regenerateSingleScene(i, true);
+          }
+          bar.style.width = '100%';
+          pct.textContent = '100%';
+          lbl.textContent = 'Semua visual adegan selesai dibuat!';
+          showToast('Semua visual adegan berhasil dibuat.', 'success');
+          setTimeout(() => wrap.classList.add('hidden'), 1800);
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      function clearSceneBlobs() {
+        Object.values(state.sceneBlobUrls).forEach((u) => URL.revokeObjectURL(u));
+        state.sceneBlobUrls = {};
+      }
+
+      function setSwitchState(btnEl, isOn) {
+        btnEl.setAttribute('aria-checked', String(isOn));
+        const thumb = btnEl.querySelector('.toggle-thumb');
+        if (isOn) {
+          btnEl.classList.remove('bg-slate-300');
+          btnEl.classList.add('bg-tealbrand-600');
+          thumb.classList.remove('translate-x-1');
+          thumb.classList.add('translate-x-6');
+        } else {
+          btnEl.classList.remove('bg-tealbrand-600');
+          btnEl.classList.add('bg-slate-300');
+          thumb.classList.remove('translate-x-6');
+          thumb.classList.add('translate-x-1');
+        }
+      }
+
+      async function copyText(text, label) {
+        try {
+          await navigator.clipboard.writeText(text);
+          showToast(`${label} berhasil disalin!`, 'success');
+        } catch {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+          showToast(`${label} berhasil disalin!`, 'success');
+        }
+      }
+
+      // ==================== EVENT LISTENERS ====================
+
+      // PIN form
+      $('pin-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        verifyAndUnlock($('pin-input').value);
+      });
+
+      $('toggle-pin-visibility').addEventListener('click', () => {
+        const inp = $('pin-input');
+        inp.type = inp.type === 'password' ? 'text' : 'password';
+      });
+
+      $('lock-app-btn').addEventListener('click', () => lockStudio());
+
+      // Stepper tabs
+      document.querySelectorAll('.step-tab').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const target = Number(btn.dataset.step);
+          if (target <= state.maxReachedStep) goToStep(target);
+        });
+      });
+
+      // Step 1 Mode Toggle
+      $('mode-tema-btn').addEventListener('click', () => {
+        state.inputMode = 'tema';
+        $('mode-tema-btn').className = 'h-10 rounded-xl text-xs sm:text-sm font-bold transition bg-white text-ink shadow-sm';
+        $('mode-manual-btn').className = 'h-10 rounded-xl text-xs sm:text-sm font-bold transition text-muted hover:text-ink';
+        $('tema-box').classList.remove('hidden');
+        $('manual-box').classList.add('hidden');
+      });
+
+      $('mode-manual-btn').addEventListener('click', () => {
+        state.inputMode = 'manual';
+        $('mode-manual-btn').className = 'h-10 rounded-xl text-xs sm:text-sm font-bold transition bg-white text-ink shadow-sm';
+        $('mode-tema-btn').className = 'h-10 rounded-xl text-xs sm:text-sm font-bold transition text-muted hover:text-ink';
+        $('manual-box').classList.remove('hidden');
+        $('tema-box').classList.add('hidden');
+      });
+
+      // Sample topic chips
+      document.querySelectorAll('.sample-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+          $('input-tema').value = chip.dataset.sample;
+        });
+      });
+
+      // Aspect ratio
+      document.querySelectorAll('.ratio-card').forEach((card) => {
+        card.addEventListener('click', () => {
+          state.rasio = card.dataset.rasio;
+          document.querySelectorAll('.ratio-card').forEach((c) => {
+            c.classList.toggle('active', c.dataset.rasio === state.rasio);
+          });
+        });
+      });
+
+      // Duration
+      document.querySelectorAll('.durasi-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.durasi = Number(btn.dataset.durasi);
+          document.querySelectorAll('.durasi-btn').forEach((b) => {
+            b.classList.toggle('active', Number(b.dataset.durasi) === state.durasi);
+          });
+        });
+      });
+
+      // Structure
+      $('select-struktur').addEventListener('change', (e) => {
+        state.struktur = e.target.value;
+      });
+
+      // Language Style
+      document.querySelectorAll('.gaya-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.gaya_bahasa = btn.dataset.gaya;
+          document.querySelectorAll('.gaya-btn').forEach((b) => {
+            b.classList.toggle('active', b.dataset.gaya === state.gaya_bahasa);
+          });
+          updatePresetBadge();
+        });
+      });
+
+      // Generate Script with Gemini AI
+      $('generate-script-btn').addEventListener('click', async () => {
+        const tema = $('input-tema').value.trim();
+        const naskahManual = $('input-naskah-manual').value.trim();
+        if (state.inputMode === 'tema' && !tema) {
+          showToast('Isi tema video terlebih dahulu.', 'error');
+          $('input-tema').focus();
+          return;
+        }
+        if (state.inputMode === 'manual' && !naskahManual) {
+          showToast('Tempelkan naskah manual terlebih dahulu.', 'error');
+          $('input-naskah-manual').focus();
+          return;
+        }
+
+        const btn = $('generate-script-btn');
+        const origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<svg class="w-5 h-5 spinner" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg><span>Menyusun naskah & storyboard...</span>`;
+
+        try {
+          const resp = await apiFetch('/api/generate-script', {
+            method: 'POST',
+            body: JSON.stringify({
+              tema: state.inputMode === 'tema' ? tema : '',
+              naskah_manual: state.inputMode === 'manual' ? naskahManual : '',
+              rasio: state.rasio,
+              durasi: state.durasi,
+              struktur: state.struktur,
+              gaya_bahasa: state.gaya_bahasa,
+            }),
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.detail || 'Gagal membuat naskah.');
+
+          clearSceneBlobs();
+          state.projectId = data.project_id;
+          state.judul = data.judul;
+          state.deskripsi = data.deskripsi;
+          state.hashtags = data.hashtags || [];
+          state.scenes = data.scenes || [];
+          state.maxReachedStep = Math.max(state.maxReachedStep, 2);
+
+          syncMetadataUI();
+          updatePresetBadge();
+          renderScenes();
+          goToStep(2);
+          showToast(`Naskah berhasil dibuat (${state.scenes.length} adegan)!`, 'success');
+        } catch (err) {
+          showToast(err.message || 'Gagal menghubungi Gemini AI.', 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      });
+
+      // Manual Storyboard Mode (works even without Gemini API key)
+      $('load-demo-storyboard-btn').addEventListener('click', () => {
+        clearSceneBlobs();
+        const temaVal = $('input-tema').value.trim();
+        state.projectId = null;
+        state.judul = temaVal || '3 Fakta Menarik Energi Terbarukan';
+        state.deskripsi = 'Video edukasi infografis singkat yang membahas konsep inti, data perbandingan, dan langkah praktis.';
+        state.hashtags = ['#EduVidStudio', '#Edukasi', '#Infografis', '#BelajarCepat', '#FaktaMenarik'];
+        state.scenes = [createDefaultScene(0), createDefaultScene(1), createDefaultScene(2)];
+        state.maxReachedStep = Math.max(state.maxReachedStep, 2);
+        syncMetadataUI();
+        updatePresetBadge();
+        renderScenes();
+        goToStep(2);
+        showToast('Storyboard manual siap diedit dan dirender.', 'success');
+      });
+
+      // Metadata accordion & edits
+      $('toggle-meta-btn').addEventListener('click', () => {
+        $('meta-editor-body').classList.toggle('hidden');
+        $('meta-chevron').classList.toggle('rotate-180');
+      });
+      $('meta-judul').addEventListener('input', (e) => {
+        state.judul = e.target.value;
+        $('meta-preview-title').textContent = state.judul || 'Video Edukasi Infografis';
+      });
+      $('meta-deskripsi').addEventListener('input', (e) => {
+        state.deskripsi = e.target.value;
+      });
+      $('meta-hashtags').addEventListener('input', (e) => {
+        state.hashtags = e.target.value
+          .split(/\s+/)
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .map((t) => (t.startsWith('#') ? t : `#${t}`));
+      });
+
+      // Scene list delegation
+      $('scenes-container').addEventListener('input', (e) => {
+        const target = e.target;
+        if (target.classList.contains('scene-input')) {
+          const idx = Number(target.dataset.sceneIdx);
+          const field = target.dataset.field;
+          state.scenes[idx][field] = target.value;
+        } else if (target.classList.contains('grafik-meta-input')) {
+          const idx = Number(target.dataset.sceneIdx);
+          const key = target.dataset.grafikMeta;
+          state.scenes[idx].data_grafik[key] = target.value;
+        } else if (target.classList.contains('grafik-item-input')) {
+          const idx = Number(target.dataset.sceneIdx);
+          const rIdx = Number(target.dataset.grafikRow);
+          const key = target.dataset.grafikKey;
+          state.scenes[idx].data_grafik.items[rIdx][key] =
+            key === 'nilai' ? Number(target.value || 0) : target.value;
+        } else if (target.classList.contains('poin-judul-input')) {
+          const idx = Number(target.dataset.sceneIdx);
+          state.scenes[idx].poin_teks.judul = target.value;
+        } else if (target.classList.contains('poin-item-input')) {
+          const idx = Number(target.dataset.sceneIdx);
+          const pIdx = Number(target.dataset.poinRow);
+          state.scenes[idx].poin_teks.poin[pIdx] = target.value;
+        }
+      });
+
+      $('scenes-container').addEventListener('change', (e) => {
+        const target = e.target;
+        if (target.classList.contains('scene-type-select')) {
+          const idx = Number(target.dataset.sceneIdx);
+          state.scenes[idx].tipe_visual = target.value;
+          renderScenes();
+        }
+      });
+
+      $('scenes-container').addEventListener('click', (e) => {
+        const regenBtn = e.target.closest('.regen-scene-btn');
+        if (regenBtn) {
+          regenerateSingleScene(Number(regenBtn.dataset.regenScene));
+          return;
+        }
+        const delBtn = e.target.closest('.delete-scene-btn');
+        if (delBtn) {
+          const idx = Number(delBtn.dataset.deleteScene);
+          state.scenes.splice(idx, 1);
+          clearSceneBlobs();
+          renderScenes();
+          return;
+        }
+        const addGrafik = e.target.closest('.add-grafik-btn');
+        if (addGrafik) {
+          const idx = Number(addGrafik.dataset.addGrafik);
+          state.scenes[idx].data_grafik.items.push({ label: 'Item Baru', nilai: 50 });
+          renderScenes();
+          return;
+        }
+        const remGrafik = e.target.closest('.remove-grafik-btn');
+        if (remGrafik) {
+          const idx = Number(remGrafik.dataset.sceneIdx);
+          const rIdx = Number(remGrafik.dataset.removeGrafik);
+          if (state.scenes[idx].data_grafik.items.length > 1) {
+            state.scenes[idx].data_grafik.items.splice(rIdx, 1);
+            renderScenes();
+          }
+          return;
+        }
+        const addPoin = e.target.closest('.add-poin-btn');
+        if (addPoin) {
+          const idx = Number(addPoin.dataset.addPoin);
+          state.scenes[idx].poin_teks.poin.push('Poin penting tambahan');
+          renderScenes();
+          return;
+        }
+        const remPoin = e.target.closest('.remove-poin-btn');
+        if (remPoin) {
+          const idx = Number(remPoin.dataset.sceneIdx);
+          const pIdx = Number(remPoin.dataset.removePoin);
+          if (state.scenes[idx].poin_teks.poin.length > 1) {
+            state.scenes[idx].poin_teks.poin.splice(pIdx, 1);
+            renderScenes();
+          }
+          return;
+        }
+        const zoomImg = e.target.closest('.zoomable-img');
+        if (zoomImg) {
+          $('lightbox-img').src = zoomImg.dataset.zoomImg;
+          $('lightbox-modal').classList.remove('hidden');
+        }
+      });
+
+      $('add-scene-btn').addEventListener('click', () => {
+        state.scenes.push(createDefaultScene(state.scenes.length));
+        renderScenes();
+      });
+
+      $('generate-all-visuals-btn').addEventListener('click', generateAllVisuals);
+
+      // Voice selection
+      document.querySelectorAll('.voice-card').forEach((card) => {
+        card.addEventListener('click', () => {
+          state.voice = card.dataset.voice;
+          document.querySelectorAll('.voice-card').forEach((c) => {
+            c.classList.toggle('active', c.dataset.voice === state.voice);
+          });
+        });
+      });
+
+      // Switches
+      $('toggle-subtitle').addEventListener('click', () => {
+        state.subtitle = !state.subtitle;
+        setSwitchState($('toggle-subtitle'), state.subtitle);
+      });
+
+      $('toggle-bgm').addEventListener('click', () => {
+        state.enable_bgm = !state.enable_bgm;
+        setSwitchState($('toggle-bgm'), state.enable_bgm);
+      });
+
+      $('select-bgm-file').addEventListener('change', (e) => {
+        state.selectedBgm = e.target.value;
+      });
+
+      // Back to Step 1
+      $('back-to-step1-btn').addEventListener('click', () => goToStep(1));
+
+      // Render Final Video MP4
+      $('render-video-btn').addEventListener('click', async () => {
+        if (!state.scenes.length) {
+          showToast('Minimal 1 adegan diperlukan.', 'error');
+          return;
+        }
+        const btn = $('render-video-btn');
+        const statusBox = $('render-status-box');
+        btn.disabled = true;
+        statusBox.classList.remove('hidden');
+
+        try {
+          const resp = await apiFetch('/api/render-video', {
+            method: 'POST',
+            body: JSON.stringify({
+              project_id: state.projectId,
+              rasio: state.rasio,
+              gaya_bahasa: state.gaya_bahasa,
+              voice: state.voice,
+              subtitle: state.subtitle,
+              enable_bgm: state.enable_bgm,
+              selected_bgm: state.selectedBgm || null,
+              scenes: state.scenes.map((s) => ({
+                narasi: s.narasi,
+                tipe_visual: s.tipe_visual,
+                visual_prompt: s.visual_prompt,
+                data_grafik: s.data_grafik,
+                poin_teks: s.poin_teks,
+              })),
+            }),
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.detail || 'Render video gagal.');
+
+          state.projectId = data.project_id;
+          state.renderMeta = data;
+
+          const videoUrl = await fetchProtectedBlobUrl(data.video_endpoint);
+          if (state.videoBlobUrl) URL.revokeObjectURL(state.videoBlobUrl);
+          state.videoBlobUrl = videoUrl;
+
+          const player = $('final-video-player');
+          player.src = videoUrl;
+          player.load();
+
+          // Render chips
+          const chips = [
+            data.resolution,
+            `${data.duration} detik`,
+            data.subtitles_burned ? 'Subtitle Aktif' : 'Tanpa Subtitle',
+            data.bgm_used ? `BGM: ${data.bgm_used}` : 'Tanpa BGM',
+          ];
+          $('render-meta-chips').innerHTML = chips
+            .map((c) => `<span class="text-[11px] font-mono font-semibold px-2.5 py-1 rounded-lg bg-canvas border border-line text-muted">${escapeHtml(c)}</span>`)
+            .join('');
+
+          syncMetadataUI();
+          state.maxReachedStep = 3;
+          goToStep(3);
+          showToast('Video MP4 selesai dirender!', 'success');
+        } catch (err) {
+          showToast(err.message || 'Gagal merender video.', 'error');
+        } finally {
+          btn.disabled = false;
+          statusBox.classList.add('hidden');
+        }
+      });
+
+      // Step 3 Download & Copy actions
+      $('download-mp4-btn').addEventListener('click', async () => {
+        try {
+          let href = state.videoBlobUrl;
+          if (!href) {
+            href = await fetchProtectedBlobUrl('/api/video/final?download=1');
+          }
+          const a = document.createElement('a');
+          a.href = href;
+          const safeSlug = (state.judul || 'EduVid_Studio_Video')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_|_$/g, '')
+            .slice(0, 40);
+          a.download = `${safeSlug || 'eduvid_studio'}.mp4`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          showToast('Mengunduh file MP4...', 'success');
+        } catch (err) {
+          showToast(err.message || 'Gagal mengunduh video.', 'error');
+        }
+      });
+
+      $('back-to-step2-btn').addEventListener('click', () => goToStep(2));
+      $('new-project-btn').addEventListener('click', () => {
+        clearSceneBlobs();
+        state.projectId = null;
+        state.scenes = [];
+        state.maxReachedStep = 1;
+        goToStep(1);
+      });
+
+      $('copy-judul-btn').addEventListener('click', () => copyText(state.judul || '', 'Judul'));
+      $('copy-deskripsi-btn').addEventListener('click', () => copyText(state.deskripsi || '', 'Deskripsi'));
+      $('copy-hashtags-btn').addEventListener('click', () => copyText((state.hashtags || []).join(' '), 'Hashtag'));
+      $('copy-all-meta-btn').addEventListener('click', () => {
+        const combined = `${state.judul}\n\n${state.deskripsi}\n\n${(state.hashtags || []).join(' ')}`.trim();
+        copyText(combined, 'Semua metadata');
+      });
+
+      // Lightbox close
+      $('close-lightbox-btn').addEventListener('click', () => $('lightbox-modal').classList.add('hidden'));
+      $('lightbox-modal').addEventListener('click', (e) => {
+        if (e.target === $('lightbox-modal')) $('lightbox-modal').classList.add('hidden');
+      });
+
+      // Auto-unlock if PIN already saved in sessionStorage
+      if (state.pin) {
+        verifyAndUnlock(state.pin, true).then((ok) => {
+          if (!ok) lockStudio();
+        });
+      } else {
+        setTimeout(() => $('pin-input').focus(), 60);
+      }
+    })();
+  </script>
+</body>
+</html>
