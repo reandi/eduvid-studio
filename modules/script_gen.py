@@ -248,15 +248,35 @@ Aturan Penting Tiap Adegan (`scenes`):
 Kembalikan HANYA JSON sesuai skema yang ditentukan."""
 
     client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=ScriptOutput,
-            temperature=0.7,
-        ),
-    )
+    preferred_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+    candidate_models = [preferred_model]
+    for fb in ("gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash"):
+        if fb not in candidate_models:
+            candidate_models.append(fb)
+
+    response = None
+    last_exc: Exception | None = None
+    for model_name in candidate_models:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=ScriptOutput,
+                    temperature=0.7,
+                ),
+            )
+            break
+        except Exception as exc:
+            last_exc = exc
+            err_msg = str(exc)
+            if any(k in err_msg for k in ("404", "NOT_FOUND", "503", "UNAVAILABLE")) or "no longer available" in err_msg.lower():
+                continue
+            raise
+
+    if response is None:
+        raise RuntimeError(f"Tidak ada model Gemini Flash yang tersedia: {last_exc}")
 
     raw_text = response.text or ""
     if not raw_text.strip():
