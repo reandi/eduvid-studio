@@ -1,4 +1,13 @@
-"""FFmpeg video editor: Ken Burns zoom, crossfades, burned-in subtitles, and optional BGM mixing."""
+"""FFmpeg video editor optimized for low-memory environments (512 MB RAM / Render Free Tier).
+
+Features:
+- Low-memory FFmpeg encoding (-preset ultrafast, -threads 1, -crf 28, single filter thread)
+- Rolling pairwise xfade crossfades (never opens more than 2 video decoders simultaneously)
+- Smooth Ken Burns zoom-in/zoom-out per scene
+- Clean burned-in bottom subtitles (.srt)
+- Optional local BGM mixing at 15% volume with end fade-out
+- Automatic cleanup of all temporary scene images, audio, clips, and SRT files after render
+"""
 
 from __future__ import annotations
 
@@ -10,6 +19,31 @@ from typing import Any
 
 BGM_DIR = Path(__file__).resolve().parent.parent / "assets" / "bgm"
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
+
+# Low-memory FFmpeg flags safe for 512 MB RAM containers (e.g. Render Free Tier)
+LOW_MEM_GLOBAL_FLAGS = [
+    "-threads",
+    "1",
+    "-filter_threads",
+    "1",
+    "-filter_complex_threads",
+    "1",
+]
+
+LOW_MEM_VIDEO_ENCODE_FLAGS = [
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-crf",
+    "28",
+    "-threads",
+    "1",
+    "-pix_fmt",
+    "yuv420p",
+    "-max_muxing_queue_size",
+    "256",
+]
 
 
 def list_bgm_files(bgm_dir: Path | None = None) -> list[str]:
@@ -31,6 +65,17 @@ def resolve_bgm_path(selected_bgm: str | None = None, bgm_dir: Path | None = Non
     return directory / files[0]
 
 
+def _safe_unlink(path: str | Path | None) -> None:
+    if not path:
+        return
+    try:
+        p = Path(path)
+        if p.is_file() or p.is_symlink():
+            p.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def _run_ffmpeg(cmd: list[str], step_label: str) -> None:
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
@@ -45,6 +90,22 @@ def _escape_ffmpeg_filter_path(path: str | Path) -> str:
     return s
 
 
+def _build_subtitle_style(rasio: str) -> str:
+    if rasio == "9:16":
+        # Portrait 1080x1920 (FFmpeg SRT virtual height = 288 -> 1 unit ≈ 6.67px)
+        return (
+            "FontName=DejaVu Sans,FontSize=8,Bold=1,"
+            "PrimaryColour=&H00FFFFFF,OutlineColour=&H00091526,BackColour=&H96091526,"
+            "BorderStyle=4,Outline=1,Shadow=0,Alignment=2,MarginL=16,MarginR=16,MarginV=16"
+        )
+    # Landscape 1920x1080 (FFmpeg SRT virtual height = 288 -> 1 unit ≈ 3.75px)
+    return (
+        "FontName=DejaVu Sans,FontSize=12,Bold=1,"
+        "PrimaryColour=&H00FFFFFF,OutlineColour=&H00091526,BackColour=&H96091526,"
+        "BorderStyle=4,Outline=1,Shadow=0,Alignment=2,MarginL=24,MarginR=24,MarginV=14"
+    )
+
+
 def _create_ken_burns_clip(
     image_path: str | Path,
     duration_sec: float,
@@ -52,14 +113,14 @@ def _create_ken_burns_clip(
     height: int,
     output_clip: str | Path,
     zoom_in: bool = True,
-    fps: int = 30,
+    fps: int = 24,
 ) -> None:
-    """Render a smooth Ken Burns (subtle zoom-in or zoom-out) video clip from a still image."""
+    """Render a smooth low-memory Ken Burns (zoom-in or zoom-out) clip from a still image."""
     total_frames = max(int(round(duration_sec * fps)), fps)
-    # Upscale slightly (1.4x) before zoompan to keep subpixel motion smooth & fast on CPU
-    up_w = int(width * 1.4)
-    up_h = int(height * 1.4)
-    zoom_range = 0.09  # Smooth subtle 9% zoom
+    # Moderate 1.15x upscale keeps zoompan smooth while keeping RAM well within 512 MB
+    up_w = int(width * 1.15)
+    up_h = int(height * 1.15)
+    zoom_range = 0.08
 
     if zoom_in:
         z_expr = f"1+{zoom_range}*on/{max(total_frames - 1, 1)}"
@@ -78,20 +139,14 @@ def _create_ken_burns_clip(
     cmd = [
         "ffmpeg",
         "-y",
+        *LOW_MEM_GLOBAL_FLAGS,
         "-i",
         str(image_path),
         "-vf",
         vf,
         "-t",
         f"{duration_sec:.3f}",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "22",
-        "-pix_fmt",
-        "yuv420p",
+        *LOW_MEM_VIDEO_ENCODE_FLAGS,
         "-an",
         str(output_clip),
     ]
@@ -139,6 +194,54 @@ def compute_scene_timeline(
     }
 
 
+def _cleanup_render_artifacts(
+    work_dir: Path,
+    scene_images: list[str | Path],
+    scene_audios: list[str | Path],
+    srt_path: str | Path | None,
+    extra_cleanup_paths: list[str | Path] | None,
+    protected_files: set[Path],
+    cleanup_scene_files: bool,
+) -> None:
+    """Remove temporary working files and (on success) per-scene images/audios/SRTs to keep disk lean."""
+    shutil.rmtree(work_dir, ignore_errors=True)
+
+    if not cleanup_scene_files:
+        return
+
+    candidates: list[Path] = []
+    for p in list(scene_images) + list(scene_audios) + list(extra_cleanup_paths or []):
+        candidates.append(Path(p))
+    if srt_path:
+        candidates.append(Path(srt_path))
+
+    parent_dirs: set[Path] = set()
+    output_root = OUTPUT_DIR.resolve()
+    for p in candidates:
+        try:
+            resolved = p.resolve()
+        except OSError:
+            continue
+        if resolved in protected_files:
+            continue
+        # Only delete files located inside OUTPUT_DIR (never touch assets/bgm or source files)
+        if str(resolved).startswith(str(output_root)):
+            _safe_unlink(resolved)
+            # Also remove sibling per-scene .srt if present
+            if resolved.suffix.lower() == ".mp3":
+                _safe_unlink(resolved.with_suffix(".srt"))
+            if resolved.parent != output_root:
+                parent_dirs.add(resolved.parent)
+
+    # Remove empty temporary project directories under OUTPUT_DIR
+    for d in parent_dirs:
+        try:
+            if d.exists() and d.is_dir() and not any(d.iterdir()):
+                d.rmdir()
+        except OSError:
+            pass
+
+
 def render_video(
     *,
     scene_images: list[str | Path],
@@ -151,15 +254,23 @@ def render_video(
     enable_bgm: bool = True,
     selected_bgm: str | None = None,
     final_output_path: str | Path | None = None,
-    fps: int = 30,
+    fps: int = 24,
+    cleanup_temp: bool = True,
+    extra_cleanup_paths: list[str | Path] | None = None,
 ) -> dict[str, Any]:
-    """Render final MP4 video with Ken Burns, crossfades, optional subtitles, and optional BGM."""
+    """Render final MP4 video with low-memory FFmpeg settings and automatic temp cleanup."""
     if not scene_images or len(scene_images) != len(scene_audios):
         raise ValueError("Jumlah gambar dan audio adegan tidak cocok.")
 
     width, height = (1920, 1080) if rasio == "16:9" else (1080, 1920)
     work = Path(work_dir)
     work.mkdir(parents=True, exist_ok=True)
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    target_mp4 = Path(final_output_path) if final_output_path else (OUTPUT_DIR / "video_final.mp4")
+    target_mp4.parent.mkdir(parents=True, exist_ok=True)
+    canonical_mp4 = OUTPUT_DIR / "video_final.mp4"
+    protected_files = {target_mp4.resolve(), canonical_mp4.resolve()}
 
     timeline = compute_scene_timeline(audio_durations)
     slot_durations: list[float] = timeline["slot_durations"]
@@ -168,170 +279,236 @@ def render_video(
     xfade_dur: float = timeline["crossfade_dur"]
     total_duration: float = timeline["total_duration"]
 
-    # 1. Generate per-scene Ken Burns clips
-    clip_paths: list[Path] = []
-    for idx, (img_path, clip_dur) in enumerate(zip(scene_images, clip_durations)):
-        clip_path = work / f"clip_{idx:02d}.mp4"
+    render_succeeded = False
+    try:
+        # 1. Build synchronized narration track (compressed AAC to minimize disk & RAM)
+        narration_m4a = work / "narration_full.m4a"
+        audio_cmd = ["ffmpeg", "-y", *LOW_MEM_GLOBAL_FLAGS]
+        audio_filters: list[str] = []
+        concat_labels: list[str] = []
+        for idx, (aud_path, slot_dur) in enumerate(zip(scene_audios, slot_durations)):
+            audio_cmd.extend(["-i", str(aud_path)])
+            audio_filters.append(
+                f"[{idx}:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo,"
+                f"apad,atrim=0:{slot_dur:.3f},asetpts=PTS-STARTPTS[a{idx}]"
+            )
+            concat_labels.append(f"[a{idx}]")
+
+        audio_filters.append(f"{''.join(concat_labels)}concat=n={len(scene_audios)}:v=0:a=1[nar]")
+        audio_cmd.extend(
+            [
+                "-filter_complex",
+                ";".join(audio_filters),
+                "-map",
+                "[nar]",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                str(narration_m4a),
+            ]
+        )
+        _run_ffmpeg(audio_cmd, "Penggabungan Audio Narasi")
+
+        # 2. Mix optional BGM (volume 15% + fade-out at end)
+        bgm_path = resolve_bgm_path(selected_bgm) if enable_bgm else None
+        final_audio_path = narration_m4a
+        bgm_used_name = ""
+
+        if bgm_path and bgm_path.exists():
+            mixed_m4a = work / "audio_mixed.m4a"
+            fade_len = min(2.5, total_duration * 0.25)
+            fade_start = max(0.0, total_duration - fade_len)
+            mix_filter = (
+                f"[0:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[nar];"
+                f"[1:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo,"
+                f"atrim=0:{total_duration:.3f},asetpts=PTS-STARTPTS,"
+                f"volume=0.15,afade=t=in:st=0:d=0.6,afade=t=out:st={fade_start:.3f}:d={fade_len:.3f}[bgm];"
+                f"[nar][bgm]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]"
+            )
+            mix_cmd = [
+                "ffmpeg",
+                "-y",
+                *LOW_MEM_GLOBAL_FLAGS,
+                "-i",
+                str(narration_m4a),
+                "-stream_loop",
+                "-1",
+                "-i",
+                str(bgm_path),
+                "-filter_complex",
+                mix_filter,
+                "-map",
+                "[aout]",
+                "-t",
+                f"{total_duration:.3f}",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                str(mixed_m4a),
+            ]
+            _run_ffmpeg(mix_cmd, "Mixing BGM")
+            _safe_unlink(narration_m4a)
+            final_audio_path = mixed_m4a
+            bgm_used_name = bgm_path.name
+
+        # 3. Generate Ken Burns clips & merge pairwise with xfade so FFmpeg never opens >2 video decoders
+        has_subtitles = bool(
+            enable_subtitle and srt_path and Path(srt_path).exists() and Path(srt_path).stat().st_size > 0
+        )
+        sub_filter_suffix = ""
+        if has_subtitles:
+            escaped_srt = _escape_ffmpeg_filter_path(srt_path)
+            style = _build_subtitle_style(rasio)
+            sub_filter_suffix = f",subtitles='{escaped_srt}':force_style='{style}'"
+
+        n_scenes = len(scene_images)
+        first_clip = work / "clip_00.mp4"
         _create_ken_burns_clip(
-            image_path=img_path,
-            duration_sec=clip_dur,
+            image_path=scene_images[0],
+            duration_sec=clip_durations[0],
             width=width,
             height=height,
-            output_clip=clip_path,
-            zoom_in=(idx % 2 == 0),
+            output_clip=first_clip,
+            zoom_in=True,
             fps=fps,
         )
-        clip_paths.append(clip_path)
 
-    # 2. Concatenate scene audio with exact slot padding so narration stays 100% synced
-    narration_wav = work / "narration_full.wav"
-    audio_cmd = ["ffmpeg", "-y"]
-    audio_filters: list[str] = []
-    concat_labels: list[str] = []
-    for idx, (aud_path, slot_dur) in enumerate(zip(scene_audios, slot_durations)):
-        audio_cmd.extend(["-i", str(aud_path)])
-        audio_filters.append(
-            f"[{idx}:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo,"
-            f"apad,atrim=0:{slot_dur:.3f},asetpts=PTS-STARTPTS[a{idx}]"
-        )
-        concat_labels.append(f"[a{idx}]")
-
-    audio_filters.append(f"{''.join(concat_labels)}concat=n={len(scene_audios)}:v=0:a=1[nar]")
-    audio_cmd.extend(
-        [
-            "-filter_complex",
-            ";".join(audio_filters),
-            "-map",
-            "[nar]",
-            "-c:a",
-            "pcm_s16le",
-            str(narration_wav),
-        ]
-    )
-    _run_ffmpeg(audio_cmd, "Penggabungan Audio Narasi")
-
-    # 3. Mix optional BGM (volume 15% + fade-out at end)
-    bgm_path = resolve_bgm_path(selected_bgm) if enable_bgm else None
-    final_audio_path = narration_wav
-    bgm_used_name = ""
-
-    if bgm_path and bgm_path.exists():
-        mixed_wav = work / "audio_mixed.wav"
-        fade_len = min(2.5, total_duration * 0.25)
-        fade_start = max(0.0, total_duration - fade_len)
-        mix_filter = (
-            f"[0:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[nar];"
-            f"[1:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo,"
-            f"atrim=0:{total_duration:.3f},asetpts=PTS-STARTPTS,"
-            f"volume=0.15,afade=t=in:st=0:d=0.6,afade=t=out:st={fade_start:.3f}:d={fade_len:.3f}[bgm];"
-            f"[nar][bgm]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]"
-        )
-        mix_cmd = [
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(narration_wav),
-            "-stream_loop",
-            "-1",
-            "-i",
-            str(bgm_path),
-            "-filter_complex",
-            mix_filter,
-            "-map",
-            "[aout]",
-            "-t",
-            f"{total_duration:.3f}",
-            "-c:a",
-            "pcm_s16le",
-            str(mixed_wav),
-        ]
-        _run_ffmpeg(mix_cmd, "Mixing BGM")
-        final_audio_path = mixed_wav
-        bgm_used_name = bgm_path.name
-
-    # 4. Assemble final video with crossfades, optional subtitles, and audio
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    target_mp4 = Path(final_output_path) if final_output_path else (OUTPUT_DIR / "video_final.mp4")
-    target_mp4.parent.mkdir(parents=True, exist_ok=True)
-
-    final_cmd = ["ffmpeg", "-y"]
-    for cp in clip_paths:
-        final_cmd.extend(["-i", str(cp)])
-    audio_input_idx = len(clip_paths)
-    final_cmd.extend(["-i", str(final_audio_path)])
-
-    filter_parts: list[str] = []
-    if len(clip_paths) == 1:
-        current_v = "[0:v]"
-    else:
-        prev_label = "[0:v]"
-        for i in range(1, len(clip_paths)):
-            out_label = f"[vx{i}]"
-            offset = start_offsets[i]
-            filter_parts.append(
-                f"{prev_label}[{i}:v]xfade=transition=fade:duration={xfade_dur:.3f}:offset={offset:.3f}{out_label}"
+        if n_scenes == 1:
+            final_cmd = [
+                "ffmpeg",
+                "-y",
+                *LOW_MEM_GLOBAL_FLAGS,
+                "-i",
+                str(first_clip),
+                "-i",
+                str(final_audio_path),
+            ]
+            if has_subtitles:
+                final_cmd.extend(
+                    [
+                        "-vf",
+                        sub_filter_suffix.lstrip(","),
+                        *LOW_MEM_VIDEO_ENCODE_FLAGS,
+                    ]
+                )
+            else:
+                final_cmd.extend(["-c:v", "copy"])
+            final_cmd.extend(
+                [
+                    "-map",
+                    "0:v:0",
+                    "-map",
+                    "1:a:0",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "128k",
+                    "-movflags",
+                    "+faststart",
+                    "-shortest",
+                    str(target_mp4),
+                ]
             )
-            prev_label = out_label
-        current_v = prev_label
-
-    # Burn clean bottom subtitles if requested and SRT file exists
-    has_subtitles = bool(enable_subtitle and srt_path and Path(srt_path).exists() and Path(srt_path).stat().st_size > 0)
-    if has_subtitles:
-        escaped_srt = _escape_ffmpeg_filter_path(srt_path)
-        if rasio == "9:16":
-            # Portrait 1080x1920 (FFmpeg SRT virtual height = 288 -> 1 unit ≈ 6.67px)
-            style = (
-                "FontName=DejaVu Sans,FontSize=8,Bold=1,"
-                "PrimaryColour=&H00FFFFFF,OutlineColour=&H00091526,BackColour=&H96091526,"
-                "BorderStyle=4,Outline=1,Shadow=0,Alignment=2,MarginL=16,MarginR=16,MarginV=16"
-            )
+            _run_ffmpeg(final_cmd, "Render Video Final")
+            _safe_unlink(first_clip)
         else:
-            # Landscape 1920x1080 (FFmpeg SRT virtual height = 288 -> 1 unit ≈ 3.75px)
-            style = (
-                "FontName=DejaVu Sans,FontSize=12,Bold=1,"
-                "PrimaryColour=&H00FFFFFF,OutlineColour=&H00091526,BackColour=&H96091526,"
-                "BorderStyle=4,Outline=1,Shadow=0,Alignment=2,MarginL=24,MarginR=24,MarginV=14"
-            )
-        filter_parts.append(f"{current_v}subtitles='{escaped_srt}':force_style='{style}'[vsub]")
-        current_v = "[vsub]"
+            current_merged = first_clip
+            for idx in range(1, n_scenes):
+                next_clip = work / f"clip_{idx:02d}.mp4"
+                _create_ken_burns_clip(
+                    image_path=scene_images[idx],
+                    duration_sec=clip_durations[idx],
+                    width=width,
+                    height=height,
+                    output_clip=next_clip,
+                    zoom_in=(idx % 2 == 0),
+                    fps=fps,
+                )
 
-    if filter_parts:
-        final_cmd.extend(["-filter_complex", ";".join(filter_parts)])
-        final_cmd.extend(["-map", current_v, "-map", f"{audio_input_idx}:a"])
-    else:
-        final_cmd.extend(["-map", "0:v", "-map", f"{audio_input_idx}:a"])
+                is_last = idx == n_scenes - 1
+                offset = start_offsets[idx]
 
-    final_cmd.extend(
-        [
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "21",
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-movflags",
-            "+faststart",
-            "-shortest",
-            str(target_mp4),
-        ]
-    )
-    _run_ffmpeg(final_cmd, "Render Video Final")
+                if is_last:
+                    # Final pairwise xfade + optional burned-in subtitles + final audio mux in one pass
+                    v_filter = (
+                        f"[0:v][1:v]xfade=transition=fade:duration={xfade_dur:.3f}:offset={offset:.3f}"
+                        f"{sub_filter_suffix}[vout]"
+                    )
+                    final_cmd = [
+                        "ffmpeg",
+                        "-y",
+                        *LOW_MEM_GLOBAL_FLAGS,
+                        "-i",
+                        str(current_merged),
+                        "-i",
+                        str(next_clip),
+                        "-i",
+                        str(final_audio_path),
+                        "-filter_complex",
+                        v_filter,
+                        "-map",
+                        "[vout]",
+                        "-map",
+                        "2:a:0",
+                        *LOW_MEM_VIDEO_ENCODE_FLAGS,
+                        "-c:a",
+                        "aac",
+                        "-b:a",
+                        "128k",
+                        "-movflags",
+                        "+faststart",
+                        "-shortest",
+                        str(target_mp4),
+                    ]
+                    _run_ffmpeg(final_cmd, "Render Video Final")
+                    _safe_unlink(current_merged)
+                    _safe_unlink(next_clip)
+                else:
+                    # Intermediate pairwise crossfade merge (video-only, immediately discards old clips)
+                    next_merged = work / f"merged_{idx:02d}.mp4"
+                    v_filter = f"[0:v][1:v]xfade=transition=fade:duration={xfade_dur:.3f}:offset={offset:.3f}[vout]"
+                    merge_cmd = [
+                        "ffmpeg",
+                        "-y",
+                        *LOW_MEM_GLOBAL_FLAGS,
+                        "-i",
+                        str(current_merged),
+                        "-i",
+                        str(next_clip),
+                        "-filter_complex",
+                        v_filter,
+                        "-map",
+                        "[vout]",
+                        *LOW_MEM_VIDEO_ENCODE_FLAGS,
+                        "-an",
+                        str(next_merged),
+                    ]
+                    _run_ffmpeg(merge_cmd, f"Crossfade Adegan {idx + 1}")
+                    _safe_unlink(current_merged)
+                    _safe_unlink(next_clip)
+                    current_merged = next_merged
 
-    # Always also keep canonical output/video_final.mp4 updated
-    canonical_mp4 = OUTPUT_DIR / "video_final.mp4"
-    if target_mp4.resolve() != canonical_mp4.resolve():
-        shutil.copy2(target_mp4, canonical_mp4)
+        # Always keep canonical output/video_final.mp4 updated
+        if target_mp4.resolve() != canonical_mp4.resolve():
+            shutil.copy2(target_mp4, canonical_mp4)
 
-    return {
-        "video_path": str(canonical_mp4),
-        "duration": round(total_duration, 2),
-        "bgm_used": bgm_used_name,
-        "subtitles_burned": has_subtitles,
-        "resolution": f"{width}x{height}",
-    }
+        render_succeeded = True
+        return {
+            "video_path": str(canonical_mp4),
+            "duration": round(total_duration, 2),
+            "bgm_used": bgm_used_name,
+            "subtitles_burned": has_subtitles,
+            "resolution": f"{width}x{height}",
+        }
+    finally:
+        _cleanup_render_artifacts(
+            work_dir=work,
+            scene_images=scene_images,
+            scene_audios=scene_audios,
+            srt_path=srt_path,
+            extra_cleanup_paths=extra_cleanup_paths,
+            protected_files=protected_files,
+            cleanup_scene_files=bool(cleanup_temp and render_succeeded),
+        )

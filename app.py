@@ -7,6 +7,7 @@ import hmac
 import logging
 import os
 import re
+import shutil
 import time
 import uuid
 from pathlib import Path
@@ -302,7 +303,7 @@ async def api_render_video(req: RenderVideoRequest) -> dict[str, Any]:
             combined_srt_path = project_dir / "subtitles_full.srt"
             build_combined_srt(tts_results, timeline["start_offsets"], combined_srt_path)
 
-        # Step D: Render final MP4 using FFmpeg
+        # Step D: Render final MP4 using FFmpeg (low-memory mode + auto-cleanup temp files)
         render_info = await asyncio.to_thread(
             render_video,
             scene_images=scene_images,
@@ -315,7 +316,11 @@ async def api_render_video(req: RenderVideoRequest) -> dict[str, Any]:
             enable_bgm=req.enable_bgm,
             selected_bgm=req.selected_bgm,
             final_output_path=OUTPUT_DIR / "video_final.mp4",
+            cleanup_temp=True,
         )
+        # Ensure any leftover files in the temporary project directory are removed
+        if project_dir.exists() and project_dir.resolve() != OUTPUT_DIR.resolve():
+            shutil.rmtree(project_dir, ignore_errors=True)
     except HTTPException:
         raise
     except Exception as exc:
